@@ -1,4 +1,4 @@
-# 🧊 Antarctic Decision Support System (DSS)
+# 🧊 N-GEO — Antarctic Decision Support System
 
 A real-time navigation and route-planning system for Antarctic waters — combining satellite sea-ice data, ML-powered forecasting, iceberg tracking, and collision-risk analysis into a single interactive dashboard.
 
@@ -145,7 +145,7 @@ The sea ice forecast uses a **Random Forest ensemble** trained on historical SIC
 
 This project is deployed on **Render.com** (free tier):
 
-🔗 [Live Demo](https://antarctic-dss.onrender.com)
+🔗 [Live Demo](https://n-geo.onrender.com/)
 
 > Free tier spins down after 15 min of inactivity. First request may take ~30s to wake up.
 
