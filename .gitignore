@@ -1,0 +1,20 @@
+__pycache__/
+*.pyc
+.env
+*.egg-info/
+dist/
+build/
+.DS_Store
+Thumbs.db
+.freebuff/
+
+# Large model files (retrain on deploy)
+.ml_models/*.pkl
+.ml_models/*.joblib
+
+# Data cache
+.data_cache/
+
+# Output files (regenerated on startup)
+output_*.npy
+output_*.json

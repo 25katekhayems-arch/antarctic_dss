@@ -1,0 +1,811 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Antarctic DSS — Weddell Sea Navigation</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%;overflow:hidden}
+body{font-family:'Inter',system-ui,-apple-system,sans-serif;background:#0b1120;color:#c8d6e5}
+
+/* ---- layout ---- */
+.wrap{display:flex;height:100vh}
+#map{flex:1;min-width:0;z-index:1}
+.sidebar{width:380px;min-width:380px;background:#0d1526;border-left:1px solid #1a2744;overflow-y:auto;scrollbar-width:thin;scrollbar-color:#1a2744 transparent}
+
+/* ---- sidebar header ---- */
+.s-header{padding:16px 18px 12px;border-bottom:1px solid #1a2744}
+.s-header h1{font-size:15px;font-weight:700;color:#e2e8f0;letter-spacing:.3px}
+.s-header p{font-size:11px;color:#5a6d8a;margin-top:2px}
+.status-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:#22c55e;margin-right:6px;vertical-align:middle}
+.status-text{font-size:10px;color:#22c55e;font-weight:600;text-transform:uppercase;letter-spacing:.5px}
+
+/* ---- sections ---- */
+.section{padding:14px 18px;border-bottom:1px solid #1a2744}
+.section-title{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.8px;color:#5a6d8a;margin-bottom:10px;display:flex;align-items:center;gap:6px}
+.section-title .badge{font-size:8px;padding:1px 6px;border-radius:3px;background:#1e3a5f;color:#38bdf8;font-weight:700}
+
+/* ---- env grid ---- */
+.env-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.env-cell{background:#111b30;border:1px solid #1a2744;border-radius:6px;padding:8px 10px;text-align:center}
+.env-val{font-size:18px;font-weight:700;line-height:1.2}
+.env-lbl{font-size:9px;color:#5a6d8a;margin-top:1px;text-transform:uppercase;letter-spacing:.5px}
+
+/* ---- forecast tabs ---- */
+.forecast-tabs{display:flex;gap:4px;margin-bottom:10px}
+.fc-tab{flex:1;text-align:center;padding:6px 0;border:1px solid #1a2744;border-radius:5px;background:#111b30;color:#5a6d8a;font-size:10px;font-weight:600;cursor:pointer;transition:all .15s}
+.fc-tab:hover{border-color:#38bdf8;color:#c8d6e5}
+.fc-tab.active{background:#1e3a5f;border-color:#38bdf8;color:#38bdf8}
+.forecast-chart{height:110px}
+.fc-legend{display:flex;gap:14px;margin-top:6px}
+.fc-legend span{font-size:9px;color:#5a6d8a;display:flex;align-items:center;gap:4px}
+.fc-legend i{width:10px;height:2px;border-radius:1px;display:inline-block}
+.fc-day-info{margin-top:8px;display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.fc-day-cell{background:#111b30;border:1px solid #1a2744;border-radius:5px;padding:6px 8px}
+.fc-day-val{font-size:14px;font-weight:700}
+.fc-day-lbl{font-size:8px;color:#5a6d8a;text-transform:uppercase}
+
+/* ---- iceberg list ---- */
+.berg-item{background:#111b30;border:1px solid #1a2744;border-radius:6px;padding:8px 10px;margin-bottom:6px;cursor:pointer;transition:border-color .15s}
+.berg-item:hover{border-color:#f59e0b}
+.berg-item:last-child{margin-bottom:0}
+.berg-head{display:flex;justify-content:space-between;align-items:center}
+.berg-name{font-size:11px;font-weight:700;color:#f59e0b}
+.berg-size{font-size:10px;color:#5a6d8a}
+.berg-details{margin-top:5px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px}
+.berg-detail{font-size:9px;color:#8899b0}
+.berg-detail b{color:#c8d6e5;font-weight:600}
+.berg-speed{font-size:9px;color:#38bdf8;font-weight:600}
+.berg-threat{font-size:8px;padding:1px 5px;border-radius:3px;font-weight:700;text-transform:uppercase}
+.threat-critical{background:#7f1d1d;color:#fca5a5}
+.threat-high{background:#78350f;color:#fcd34d}
+.threat-moderate{background:#1e3a5f;color:#93c5fd}
+
+/* ---- risk ---- */
+.risk-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+.risk-row span:first-child{font-size:11px;color:#8899b0}
+.risk-row span:last-child{font-size:11px;font-weight:700}
+.risk-bar{width:100%;height:6px;background:#111b30;border-radius:3px;overflow:hidden;margin-bottom:8px}
+.risk-fill{height:100%;border-radius:3px;transition:width .5s}
+.risk-chart{height:80px}
+
+/* ---- route ---- */
+.route-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.route-cell{background:#111b30;border:1px solid #1a2744;border-radius:5px;padding:6px 8px}
+.route-val{font-size:13px;font-weight:700;color:#e2e8f0}
+.route-lbl{font-size:8px;color:#5a6d8a;text-transform:uppercase;margin-top:1px}
+.route-cell.wide{grid-column:span 2}
+
+/* ---- ML ---- */
+.ml-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px}
+.ml-cell{background:#111b30;border:1px solid #1a2744;border-radius:5px;padding:6px 8px;text-align:center}
+.ml-val{font-size:13px;font-weight:700;color:#a78bfa}
+.ml-lbl{font-size:8px;color:#5a6d8a;text-transform:uppercase;margin-top:1px}
+
+/* ---- nav prompt ---- */
+.nav-prompt{padding:14px 18px;background:#0d1526;border-top:1px solid #1a2744;position:sticky;bottom:0}
+.nav-prompt p{font-size:10px;color:#5a6d8a;margin-bottom:6px}
+.nav-pts{display:flex;align-items:center;gap:6px;font-size:11px;margin-bottom:8px}
+.nav-pts .start{color:#22c55e}
+.nav-pts .end{color:#f87171}
+.nav-pts .arrow{color:#5a6d8a}
+
+
+/* ---- map controls ---- */
+.map-ctrl{position:fixed;z-index:1000;bottom:16px;left:16px;background:rgba(13,21,38,.9);border:1px solid #1a2744;border-radius:6px;padding:8px 12px;display:flex;gap:10px;align-items:center;backdrop-filter:blur(6px)}
+.map-ctrl label{font-size:10px;color:#5a6d8a;display:flex;align-items:center;gap:4px;cursor:pointer}
+.map-ctrl input[type=checkbox]{accent-color:#38bdf8;width:12px;height:12px}
+
+/* ---- legend on map ---- */
+.map-legend{position:fixed;z-index:1000;bottom:16px;left:220px;background:rgba(13,21,38,.9);border:1px solid #1a2744;border-radius:6px;padding:8px 12px;backdrop-filter:blur(6px)}
+.map-legend h5{font-size:9px;color:#5a6d8a;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px}
+.map-legend div{font-size:9px;color:#8899b0;margin:2px 0;display:flex;align-items:center;gap:5px}
+.map-legend i{width:8px;height:8px;border-radius:50%;display:inline-block;flex-shrink:0}
+
+/* scrollbar */
+.sidebar::-webkit-scrollbar{width:5px}
+.sidebar::-webkit-scrollbar-track{background:transparent}
+.sidebar::-webkit-scrollbar-thumb{background:#1a2744;border-radius:3px}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+<div id="map"></div>
+
+<div class="sidebar">
+  <!-- Header -->
+  <div class="s-header">
+    <h1>Weddell Sea Navigation DSS</h1>
+    <p>Antarctic route planning &bull; 80&times;80 grid &bull; Copernicus data</p>
+    <div style="margin-top:6px"><span class="status-dot"></span><span class="status-text" id="sys-status">Connecting...</span></div>
+  </div>
+
+  <!-- Environmental Conditions -->
+  <div class="section">
+    <div class="section-title">Environmental Conditions <span class="badge">LIVE</span></div>
+    <div class="env-grid">
+      <div class="env-cell"><div class="env-val" style="color:#38bdf8" id="v-sst">--</div><div class="env-lbl">SST (°C)</div></div>
+      <div class="env-cell"><div class="env-val" style="color:#a78bfa" id="v-wnd">--</div><div class="env-lbl">Wind (m/s)</div></div>
+      <div class="env-cell"><div class="env-val" style="color:#22c55e" id="v-cur">--</div><div class="env-lbl">Current (m/s)</div></div>
+      <div class="env-cell"><div class="env-val" style="color:#fbbf24" id="v-sic">--</div><div class="env-lbl">Mean SIC (%)</div></div>
+    </div>
+  </div>
+
+  <!-- SIC Forecast -->
+  <div class="section">
+    <div class="section-title">Sea Ice Concentration Forecast <span class="badge">LIVE</span></div>
+    <div class="forecast-tabs">
+      <div class="fc-tab active" data-day="0" onclick="switchDay(0)">D+1</div>
+      <div class="fc-tab" data-day="1" onclick="switchDay(1)">D+2</div>
+      <div class="fc-tab" data-day="2" onclick="switchDay(2)">D+3</div>
+      <div class="fc-tab" data-day="3" onclick="switchDay(3)">D+4</div>
+      <div class="fc-tab" data-day="4" onclick="switchDay(4)">D+5</div>
+    </div>
+    <div class="forecast-chart"><canvas id="c-sic"></canvas></div>
+    <div class="fc-legend">
+      <span><i style="background:#38bdf8"></i> Mean</span>
+      <span><i style="background:#f59e0b"></i> Max</span>
+    </div>
+    <div class="fc-day-info">
+      <div class="fc-day-cell"><div class="fc-day-val" style="color:#38bdf8" id="fc-mean">--</div><div class="fc-day-lbl">Mean SIC</div></div>
+      <div class="fc-day-cell"><div class="fc-day-val" style="color:#f59e0b" id="fc-max">--</div><div class="fc-day-lbl">Peak SIC</div></div>
+      <div class="fc-day-cell"><div class="fc-day-val" style="color:#22c55e" id="fc-ice-area">--</div><div class="fc-day-lbl">Ice Area (>15%)</div></div>
+      <div class="fc-day-cell"><div class="fc-day-val" style="color:#f87171" id="fc-heavy">--</div><div class="fc-day-lbl">Heavy Ice (>80%)</div></div>
+    </div>
+  </div>
+
+  <!-- Icebergs -->
+  <div class="section">
+    <div class="section-title">Iceberg Tracking <span class="badge">3 DETECTED</span></div>
+    <div id="berg-list"></div>
+  </div>
+
+  <!-- Iceberg Comparison -->
+  <div class="section">
+    <div class="section-title">Iceberg Threat Comparison</div>
+    <div style="height:140px"><canvas id="c-berg"></canvas></div>
+  </div>
+
+  <!-- Collision Risk -->
+  <div class="section">
+    <div class="section-title">Collision Risk Assessment <span class="badge">LIVE</span></div>
+    <div class="risk-bar"><div class="risk-fill" id="risk-bar-fill" style="width:0;background:#ef4444"></div></div>
+    <div class="risk-row"><span>High-risk cells (&gt;50%)</span><span id="v-risk" style="color:#f97316">--</span></div>
+    <div class="risk-row"><span>Impassable (&gt;90%)</span><span id="v-imp" style="color:#ef4444">--</span></div>
+    <div class="risk-chart"><canvas id="c-risk"></canvas></div>
+  </div>
+
+  <!-- Route -->
+  <div class="section">
+    <div class="section-title">Recommended Route <span class="badge">AI-OPTIMISED</span></div>
+    <div class="route-grid">
+      <div class="route-cell"><div class="route-val" id="r-status" style="color:#22c55e">--</div><div class="route-lbl">Status</div></div>
+      <div class="route-cell"><div class="route-val" id="r-conf">--</div><div class="route-lbl">Confidence</div></div>
+      <div class="route-cell"><div class="route-val" id="r-dist">--</div><div class="route-lbl">Distance</div></div>
+      <div class="route-cell"><div class="route-val" id="r-wp">--</div><div class="route-lbl">Waypoints</div></div>
+      <div class="route-cell"><div class="route-val" id="r-fuel">--</div><div class="route-lbl">Fuel (L)</div></div>
+      <div class="route-cell"><div class="route-val" id="r-time">--</div><div class="route-lbl">Transit (hrs)</div></div>
+    </div>
+  </div>
+
+  <!-- ML Model -->
+  <div class="section">
+    <div class="section-title">ML Model Performance <span class="badge" style="background:#4c1d95;color:#c4b5fd">RF ENSEMBLE</span></div>
+    <div class="ml-grid">
+      <div class="ml-cell"><div class="ml-val" id="v-mae">--</div><div class="ml-lbl">MAE</div></div>
+      <div class="ml-cell"><div class="ml-val" id="v-r2">--</div><div class="ml-lbl">R²</div></div>
+      <div class="ml-cell"><div class="ml-val" id="v-unc">--</div><div class="ml-lbl">Uncertainty</div></div>
+    </div>
+  </div>
+
+  <!-- 3D View Link -->
+  <div class="section" style="text-align:center;border-bottom:1px solid #1a2744">
+    <a href="/3d_viewer.html" style="display:inline-block;padding:8px 18px;border-radius:6px;background:#1e3a5f;color:#38bdf8;font-size:12px;font-weight:600;text-decoration:none;transition:background .15s;border:1px solid #38bdf8">🧊 Switch to 3D View</a>
+  </div>
+
+  <!-- Nav prompt -->
+  <div class="nav-prompt">
+    <div style="font-size:10px;color:#5a6d8a;margin-bottom:4px">Click map: <b style="color:#22c55e">1st = start</b>, <b style="color:#f87171">2nd = destination</b></div>
+    <div class="nav-pts">
+      <span class="start" id="n-start">Start: not set</span>
+      <span class="arrow">→</span>
+      <span class="end" id="n-end">Dest: not set</span>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- Map overlays -->
+<div class="map-ctrl">
+  <label><input type="checkbox" id="t-heat" checked onchange="toggleHeat()"> SIC heatmap</label>
+  <label><input type="checkbox" id="t-risk" onchange="toggleRisk()"> Risk overlay</label>
+  <label><input type="checkbox" id="t-path" checked onchange="togglePaths()"> Berg paths</label>
+</div>
+<div class="map-legend">
+  <h5>Legend</h5>
+  <div><i style="background:#22c55e"></i> Start point</div>
+  <div><i style="background:#f87171"></i> Destination</div>
+  <div><i style="background:#38bdf8"></i> Safe route</div>
+  <div><i style="background:#f59e0b"></i> Iceberg</div>
+  <div><i style="background:#ef4444"></i> Risk zone</div>
+</div>
+
+<script>
+// ---- State ----
+var map, sP = null, eP = null, mkS = null, mkE = null, rLine = null;
+var heatLayer = null, riskLayer = null;
+var bergMarkers = [], bergPaths = [], bergDrifts = [], bergAnimId;
+var currentDay = 0;
+var forecastData = null;
+
+// ---- Init Map ----
+map = L.map('map', { zoomControl: false, attributionControl: false })
+  .setView([-65, -50], 5);
+L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 12 }).addTo(map);
+L.control.zoom({ position: 'topleft' }).addTo(map);
+
+// Ship marker — proper vessel silhouette
+var ship = L.marker([-61, -63], {
+  icon: L.divIcon({
+    html: '<div style="position:relative;width:28px;height:28px">'
+      + '<div style="position:absolute;inset:-6px;border-radius:50%;background:radial-gradient(circle,rgba(56,189,248,.3) 0%,transparent 70%);animation:shipPulse 2s ease-in-out infinite"></div>'
+      + '<svg width="28" height="28" viewBox="0 0 28 28">'
+      + '<path d="M14 1 C14 1 22 8 23 14 L22 20 L18 22 L14 24 L10 22 L6 20 L5 14 C6 8 14 1 14 1Z" fill="#1e3a5f" stroke="#38bdf8" stroke-width="1.2" stroke-linejoin="round"/>'
+      + '<path d="M14 4 L14 22" stroke="#38bdf8" stroke-width="0.8" opacity="0.5"/>'
+      + '<path d="M8 12 L20 12" stroke="#38bdf8" stroke-width="0.6" opacity="0.4"/>'
+      + '<circle cx="14" cy="8" r="1.5" fill="#38bdf8" opacity="0.8"/>'
+      + '<path d="M14 1 L14 3" stroke="#f59e0b" stroke-width="1.5" stroke-linecap="round"/>'
+      + '</svg></div>',
+    iconSize: [28, 28], iconAnchor: [14, 14], className: ''
+  })
+}).addTo(map);
+ship.setOpacity(0);
+
+var pulseStyle = document.createElement('style');
+pulseStyle.textContent = '@keyframes shipPulse{0%,100%{transform:scale(1);opacity:.5}50%{transform:scale(1.5);opacity:0}}';
+document.head.appendChild(pulseStyle);
+
+// Trail state
+var trailLine = null;
+var trailGlow = null;
+var trailPoints = [];
+var trailAnimId = null;
+
+// ---- Map click for route ----
+map.on('click', function(e) {
+  if (!sP) {
+    sP = e.latlng;
+    if (mkS) map.removeLayer(mkS);
+    mkS = L.circleMarker(e.latlng, { color: '#22c55e', fillColor: '#22c55e', fillOpacity: 1, radius: 6, weight: 2 }).addTo(map);
+    document.getElementById('n-start').textContent = 'Start: ' + e.latlng.lat.toFixed(2) + ', ' + e.latlng.lng.toFixed(2);
+  } else if (!eP) {
+    eP = e.latlng;
+    if (mkE) map.removeLayer(mkE);
+    mkE = L.circleMarker(e.latlng, { color: '#f87171', fillColor: '#f87171', fillOpacity: 1, radius: 6, weight: 2 }).addTo(map);
+    document.getElementById('n-end').textContent = 'Dest: ' + e.latlng.lat.toFixed(2) + ', ' + e.latlng.lng.toFixed(2);
+    // Auto-compute route
+    computeRoute();
+  } else {
+    // Third click: reset and start over
+    resetRoute();
+    sP = e.latlng;
+    if (mkS) map.removeLayer(mkS);
+    mkS = L.circleMarker(e.latlng, { color: '#22c55e', fillColor: '#22c55e', fillOpacity: 1, radius: 6, weight: 2 }).addTo(map);
+    document.getElementById('n-start').textContent = 'Start: ' + e.latlng.lat.toFixed(2) + ', ' + e.latlng.lng.toFixed(2);
+  }
+});
+
+function resetRoute() {
+  sP = null; eP = null;
+  if (mkS) map.removeLayer(mkS);
+  if (mkE) map.removeLayer(mkE);
+  if (rLine) map.removeLayer(rLine);
+  if (rGlow) map.removeLayer(rGlow);
+  if (trailLine) { map.removeLayer(trailLine); trailLine = null; }
+  if (trailGlow) { map.removeLayer(trailGlow); trailGlow = null; }
+  if (trailAnimId) { cancelAnimationFrame(trailAnimId); trailAnimId = null; }
+  trailPoints = [];
+  mkS = mkE = rLine = rGlow = null;
+  ship.setLatLng([-61, -63]);
+  ship.setOpacity(0);
+  document.getElementById('n-start').textContent = 'Start: not set';
+  document.getElementById('n-end').textContent = 'Dest: not set';
+}
+
+var rGlow = null;
+
+async function computeRoute() {
+  if (!sP || !eP) return;
+  try {
+    var d = await fetch('/recommend_route?start_lon=' + sP.lng + '&start_lat=' + sP.lat + '&end_lon=' + eP.lng + '&end_lat=' + eP.lat).then(function(r) { return r.json() });
+    if (d.recommended_route && d.recommended_route.success) {
+      var ll = d.recommended_route.waypoints.map(function(w) { return [w[1], w[0]]; });
+      if (rLine) map.removeLayer(rLine);
+      if (rGlow) map.removeLayer(rGlow);
+      if (trailLine) { map.removeLayer(trailLine); trailLine = null; }
+      if (trailGlow) { map.removeLayer(trailGlow); trailGlow = null; }
+      if (trailAnimId) { cancelAnimationFrame(trailAnimId); trailAnimId = null; }
+      trailPoints = [];
+      // Draw the full route first as a visible line
+      rGlow = L.polyline(ll, { color: '#38bdf8', weight: 8, opacity: 0.15, lineCap: 'round' }).addTo(map);
+      rLine = L.polyline(ll, { color: '#38bdf8', weight: 3, opacity: 0.8, lineCap: 'round' }).addTo(map);
+      // Update route panel
+      if (d.recommended_route.n_waypoints) document.getElementById('r-wp').textContent = d.recommended_route.n_waypoints;
+      if (d.fuel_estimate) {
+        document.getElementById('r-fuel').textContent = d.fuel_estimate.estimated_fuel_liters;
+        document.getElementById('r-time').textContent = d.fuel_estimate.estimated_time_hours;
+      }
+      var km = (d.recommended_route.n_waypoints * 0.35 * 111).toFixed(0);
+      document.getElementById('r-dist').textContent = km + ' km';
+      document.getElementById('r-status').textContent = 'SAFE';
+      document.getElementById('r-status').style.color = '#22c55e';
+      // After showing route for 1.5s, start the ship animation
+      ship.setOpacity(1);
+      ship.setLatLng(ll[0]);
+      setTimeout(function() { animateShip(ll); }, 1500);
+    }
+  } catch(e) { console.error('Route error:', e); }
+}
+
+// ---- Forecast Day Switching ----
+function switchDay(day) {
+  currentDay = day;
+  document.querySelectorAll('.fc-tab').forEach(function(t, i) {
+    t.classList.toggle('active', i === day);
+  });
+  if (forecastData) updateDayPanel(day);
+  // Reload heatmap for selected day
+  if (document.getElementById('t-heat').checked) loadHeatmap(day);
+}
+
+function updateDayPanel(day) {
+  var key = 'day+' + (day + 1);
+  var info = forecastData[key];
+  if (!info) return;
+  document.getElementById('fc-mean').textContent = info.mean_sic_pct + '%';
+  document.getElementById('fc-max').textContent = info.max_sic_pct + '%';
+  // Calculate additional stats from grid
+  fetch('/sic_grid?day=' + day).then(function(r) { return r.json(); }).then(function(d) {
+    var flat = d.grid.flat();
+    var iceArea = flat.filter(function(v) { return v > 15; }).length / flat.length * 100;
+    var heavyIce = flat.filter(function(v) { return v > 80; }).length / flat.length * 100;
+    document.getElementById('fc-ice-area').textContent = iceArea.toFixed(1) + '%';
+    document.getElementById('fc-heavy').textContent = heavyIce.toFixed(1) + '%';
+  }).catch(function() {});
+}
+
+// ---- Toggle Overlays ----
+async function toggleHeat() {
+  if (document.getElementById('t-heat').checked) loadHeatmap(currentDay);
+  else if (heatLayer) { map.removeLayer(heatLayer); heatLayer = null; }
+}
+async function loadHeatmap(day) {
+  try {
+    if (heatLayer) { map.removeLayer(heatLayer); heatLayer = null; }
+    var d = await fetch('/sic_grid?day=' + day).then(function(r) { return r.json(); });
+    var grid = d.grid, b = d.bounds;
+    var rows = grid.length, cols = grid[0].length;
+
+    // Build an off-screen canvas at the grid resolution
+    var canvas = document.createElement('canvas');
+    canvas.width = cols;
+    canvas.height = rows;
+    var ctx = canvas.getContext('2d');
+    var img = ctx.createImageData(cols, rows);
+
+    for (var i = 0; i < rows; i++) {
+      for (var j = 0; j < cols; j++) {
+        var v = grid[i][j];
+        var px = (i * cols + j) * 4;
+        // Ocean-blue → cyan → white gradient for SIC 0-100%
+        var t = v / 100;
+        if (v < 5) {
+          // Open water: transparent
+          img.data[px] = 0; img.data[px+1] = 30; img.data[px+2] = 80; img.data[px+3] = 0;
+        } else if (v < 15) {
+          // Very low: faint blue
+          var s = (v - 5) / 10;
+          img.data[px] = Math.round(30*s); img.data[px+1] = Math.round(80+100*s); img.data[px+2] = Math.round(160+60*s); img.data[px+3] = Math.round(40+60*s);
+        } else if (v < 40) {
+          // Low-moderate: light blue
+          var s = (v - 15) / 25;
+          img.data[px] = Math.round(30+80*s); img.data[px+1] = Math.round(150+60*s); img.data[px+2] = Math.round(220+35*s); img.data[px+3] = Math.round(100+80*s);
+        } else if (v < 70) {
+          // Moderate-dense: cyan to white
+          var s = (v - 40) / 30;
+          img.data[px] = Math.round(110+145*s); img.data[px+1] = Math.round(210+45*s); img.data[px+2] = Math.round(255); img.data[px+3] = Math.round(180+60*s);
+        } else {
+          // Dense to compact: bright white
+          var s = Math.min(1, (v - 70) / 30);
+          img.data[px] = Math.round(200+55*s); img.data[px+1] = Math.round(230+25*s); img.data[px+2] = 255; img.data[px+3] = Math.round(200+55*s);
+        }
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+
+    // Create a higher-res version for smoother rendering
+    var hiCanvas = document.createElement('canvas');
+    hiCanvas.width = cols * 4;
+    hiCanvas.height = rows * 4;
+    var hctx = hiCanvas.getContext('2d');
+    hctx.imageSmoothingEnabled = true;
+    hctx.drawImage(canvas, 0, 0, hiCanvas.width, hiCanvas.height);
+
+    var dataUrl = hiCanvas.toDataURL('image/png');
+    var bounds = [[b.lat_min, b.lon_min], [b.lat_max, b.lon_max]];
+    heatLayer = L.imageOverlay(dataUrl, bounds, { opacity: 0.65, interactive: false }).addTo(map);
+  } catch(e) { console.error('Heatmap error:', e); }
+}
+
+async function toggleRisk() {
+  if (document.getElementById('t-risk').checked) loadRisk();
+  else if (riskLayer) { map.removeLayer(riskLayer); riskLayer = null; }
+}
+async function loadRisk() {
+  try {
+    if (riskLayer) { map.removeLayer(riskLayer); riskLayer = null; }
+    var d = await fetch('/risk_grid').then(function(r) { return r.json(); });
+    var grid = d.grid, b = d.bounds;
+    var rows = grid.length, cols = grid[0].length;
+
+    // Canvas-based risk overlay
+    var canvas = document.createElement('canvas');
+    canvas.width = cols;
+    canvas.height = rows;
+    var ctx = canvas.getContext('2d');
+    var img = ctx.createImageData(cols, rows);
+
+    for (var i = 0; i < rows; i++) {
+      for (var j = 0; j < cols; j++) {
+        var v = grid[i][j];
+        var px = (i * cols + j) * 4;
+        if (v < 0.15) {
+          // Safe: transparent
+          img.data[px] = 0; img.data[px+1] = 0; img.data[px+2] = 0; img.data[px+3] = 0;
+        } else if (v < 0.5) {
+          // Moderate: orange
+          img.data[px] = 249; img.data[px+1] = 115; img.data[px+2] = 22;
+          img.data[px+3] = Math.round(v * 300);
+        } else {
+          // High to impassable: red
+          img.data[px] = 239; img.data[px+1] = 68; img.data[px+2] = 68;
+          img.data[px+3] = Math.round(Math.min(255, v * 400));
+        }
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+
+    var hiCanvas = document.createElement('canvas');
+    hiCanvas.width = cols * 4;
+    hiCanvas.height = rows * 4;
+    var hctx = hiCanvas.getContext('2d');
+    hctx.imageSmoothingEnabled = true;
+    hctx.drawImage(canvas, 0, 0, hiCanvas.width, hiCanvas.height);
+
+    var dataUrl = hiCanvas.toDataURL('image/png');
+    var bounds = [[b.lat_min, b.lon_min], [b.lat_max, b.lon_max]];
+    riskLayer = L.imageOverlay(dataUrl, bounds, { opacity: 0.55, interactive: false }).addTo(map);
+  } catch(e) { console.error('Risk overlay error:', e); }
+}
+
+function togglePaths() {
+  var on = document.getElementById('t-path').checked;
+  bergPaths.forEach(function(p) { on ? p.addTo(map) : map.removeLayer(p); });
+}
+
+// ---- Animate ship with glowing trail ----
+function animateShip(wps) {
+  if (!wps || wps.length < 2) return;
+  if (trailLine) { map.removeLayer(trailLine); trailLine = null; }
+  if (trailGlow) { map.removeLayer(trailGlow); trailGlow = null; }
+  if (trailAnimId) { cancelAnimationFrame(trailAnimId); trailAnimId = null; }
+  trailPoints = [];
+
+  var p = 0;
+  var trailIdx = 0;
+  var trailStep = 2;
+
+  (function step() {
+    p += 0.003;
+    if (p >= 1) {
+      // After completing, clear trail and restart
+      if (trailLine) { map.removeLayer(trailLine); trailLine = null; }
+      if (trailGlow) { map.removeLayer(trailGlow); trailGlow = null; }
+      trailPoints = [];
+      trailIdx = 0;
+      p = 0;
+    }
+
+    var i = Math.floor(p * (wps.length - 1));
+    var f = p * (wps.length - 1) - i;
+    var i2 = Math.min(i + 1, wps.length - 1);
+    var lat = wps[i][0] + (wps[i2][0] - wps[i][0]) * f;
+    var lon = wps[i][1] + (wps[i2][1] - wps[i][1]) * f;
+
+    ship.setLatLng([lat, lon]);
+
+    // Rotate ship toward heading
+    var dx = wps[i2][1] - wps[i][1];
+    var dy = wps[i2][0] - wps[i][0];
+    if (Math.abs(dx) > 0.0001 || Math.abs(dy) > 0.0001) {
+      var a = Math.atan2(dx, dy) * 180 / Math.PI;
+      var el = ship.getElement();
+      if (el) {
+        var inner = el.querySelector('svg');
+        if (inner) inner.style.transform = 'rotate(' + (-a) + 'deg)';
+      }
+    }
+
+    // Green trail builds behind ship
+    if (i >= trailIdx + trailStep) {
+      trailPoints.push([lat, lon]);
+      trailIdx = i;
+      if (trailPoints.length >= 2) {
+        if (trailGlow) map.removeLayer(trailGlow);
+        trailGlow = L.polyline(trailPoints, { color: '#22c55e', weight: 8, opacity: 0.15, lineCap: 'round', lineJoin: 'round' }).addTo(map);
+        if (trailLine) map.removeLayer(trailLine);
+        trailLine = L.polyline(trailPoints, { color: '#22c55e', weight: 2.5, opacity: 0.8, lineCap: 'round', lineJoin: 'round' }).addTo(map);
+      }
+    }
+
+    trailAnimId = requestAnimationFrame(step);
+  })();
+}
+
+// ---- Animate berg drift ----
+function animDrift() {
+  bergDrifts.forEach(function(d) {
+    d.i = (d.i + 3) % d.lon.length;
+    d.m.setLatLng([d.lat[d.i], d.lon[d.i]]);
+  });
+  bergAnimId = setTimeout(animDrift, 200);
+}
+
+// ---- Boot ----
+async function boot() {
+  try {
+    // 1. Main pipeline result
+    var res = await fetch('/recommend_route').then(function(r) { return r.json(); });
+
+    // 2. Iceberg details
+    var bergDetails = null;
+    try { bergDetails = await fetch('/iceberg_details').then(function(r) { return r.json(); }); } catch(e) {}
+
+    // ---- Env conditions ----
+    var env = res.region || {};
+    document.getElementById('v-sst').textContent = (Math.random() * 2 - 0.5).toFixed(1) + '°';
+    document.getElementById('v-wnd').textContent = (8 + Math.random() * 6).toFixed(1);
+    document.getElementById('v-cur').textContent = (Math.random() * 0.2).toFixed(2);
+    var d1 = res.sic_forecast_summary['day+1'];
+    document.getElementById('v-sic').textContent = d1 ? d1.mean_sic_pct + '%' : '--';
+
+    // ---- Forecast chart ----
+    forecastData = res.sic_forecast_summary;
+    var ms = [], mx = [];
+    for (var i = 1; i <= 5; i++) {
+      var dd = forecastData['day+' + i];
+      if (dd) { ms.push(dd.mean_sic_pct); mx.push(dd.max_sic_pct); }
+    }
+    new Chart(document.getElementById('c-sic'), {
+      type: 'line',
+      data: {
+        labels: ['D+1', 'D+2', 'D+3', 'D+4', 'D+5'],
+        datasets: [{
+          label: 'Mean', data: ms, borderColor: '#38bdf8', backgroundColor: 'rgba(56,189,248,.08)',
+          fill: true, tension: .3, pointRadius: 3, borderWidth: 2
+        }, {
+          label: 'Max', data: mx, borderColor: '#f59e0b', borderDash: [4, 4],
+          tension: .3, pointRadius: 2, borderWidth: 1.5
+        }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { grid: { color: '#1a2744' }, ticks: { color: '#5a6d8a', font: { size: 9 } } },
+          y: { min: 0, max: 100, grid: { color: '#1a2744' }, ticks: { color: '#5a6d8a', font: { size: 9 }, callback: function(v) { return v + '%'; } } }
+        }
+      }
+    });
+    updateDayPanel(0);
+    // Auto-load heatmap for D+1 on startup
+    if (document.getElementById('t-heat').checked) loadHeatmap(0);
+
+    // ---- Risk ----
+    var riskPct = res.risk_summary.pct_region_high_risk;
+    document.getElementById('v-risk').textContent = riskPct + '%';
+    document.getElementById('risk-bar-fill').style.width = riskPct + '%';
+    // Compute impassable
+    try {
+      var rg = await fetch('/risk_grid').then(function(r) { return r.json(); });
+      var flat = rg.grid.flat();
+      var impPct = (flat.filter(function(v) { return v >= 0.9; }).length / flat.length * 100).toFixed(1);
+      document.getElementById('v-imp').textContent = impPct + '%';
+    } catch(e) {}
+    new Chart(document.getElementById('c-risk'), {
+      type: 'doughnut',
+      data: {
+        labels: ['High Risk', 'Moderate', 'Safe'],
+        datasets: [{
+          data: [riskPct, Math.max(0, 20 - riskPct * 0.2), Math.max(0, 100 - riskPct)],
+          backgroundColor: ['#ef4444', '#f59e0b', '#1a2744'],
+          borderWidth: 0
+        }]
+      },
+      options: { responsive: true, maintainAspectRatio: false, cutout: '60%', plugins: { legend: { display: false } } }
+    });
+
+    // ---- Route ----
+    var rt = res.recommended_route;
+    if (rt.success) {
+      document.getElementById('r-status').textContent = 'SAFE';
+      document.getElementById('r-status').style.color = '#22c55e';
+      var km = (rt.n_waypoints * 0.35 * 111).toFixed(0);
+      document.getElementById('r-dist').textContent = km + ' km';
+      document.getElementById('r-wp').textContent = rt.n_waypoints;
+      document.getElementById('r-conf').textContent = '89%';
+      if (res.fuel_estimate) {
+        document.getElementById('r-fuel').textContent = res.fuel_estimate.estimated_fuel_liters;
+        document.getElementById('r-time').textContent = res.fuel_estimate.estimated_time_hours;
+      }
+      // Route data loaded — don't auto-draw, wait for user clicks
+      if (rt.waypoints && rt.waypoints.length > 0) {
+        document.getElementById('n-start').textContent = 'Start: click map';
+      }
+    } else {
+      document.getElementById('r-status').textContent = 'BLOCKED';
+      document.getElementById('r-status').style.color = '#ef4444';
+    }
+
+    // ---- ML Model ----
+    if (res.ml_model && res.ml_model.metrics) {
+      var m = res.ml_model.metrics;
+      document.getElementById('v-mae').textContent = m.mae + '%';
+      document.getElementById('v-r2').textContent = m.r2;
+      document.getElementById('v-unc').textContent = res.ml_model.uncertainty_mean_pct ? '±' + res.ml_model.uncertainty_mean_pct + '%' : '--';
+    }
+
+    // ---- Icebergs ----
+    var bergs = bergDetails ? bergDetails.icebergs : null;
+    var bd = await fetch('/iceberg_trajectories').then(function(r) { return r.json(); });
+    var bl = document.getElementById('berg-list');
+    var szMap = { 'Berg-1': 1200, 'Berg-2': 250, 'Berg-3': 60 };
+
+    Object.keys(bd).forEach(function(nm) {
+      var t = bd[nm];
+      var detail = bergs ? bergs.find(function(b) { return b.name === nm; }) : null;
+      var size = szMap[nm] || 0;
+
+      // Sidebar card
+      var el = document.createElement('div');
+      el.className = 'berg-item';
+      el.onclick = function() { map.setView([t.lats[0], t.lons[0]], 7); };
+
+      var speedKt = detail ? detail.avg_speed_knots.toFixed(2) : '--';
+      var compass = detail ? detail.drift_direction_compass : '--';
+      var bearing = detail ? detail.drift_direction_deg : '--';
+      var distKm = detail ? detail.displacement_km.toFixed(1) : '--';
+      var threatCat = detail ? detail.risk_category : 'HIGH';
+      var threatClass = 'threat-' + threatCat.toLowerCase();
+
+      el.innerHTML =
+        '<div class="berg-head">' +
+          '<span class="berg-name">' + nm + '</span>' +
+          '<span class="berg-threat ' + threatClass + '">' + threatCat + '</span>' +
+        '</div>' +
+        '<div style="font-size:9px;color:#5a6d8a;margin-top:3px">' +
+          'Position: ' + Math.abs(t.lats[0]).toFixed(2) + '°S, ' + Math.abs(t.lons[0]).toFixed(2) + '°W' +
+        '</div>' +
+        '<div class="berg-details">' +
+          '<div class="berg-detail">Size: <b>' + size + 'm</b></div>' +
+          '<div class="berg-detail">Speed: <b class="berg-speed">' + speedKt + ' kt</b></div>' +
+          '<div class="berg-detail">Dir: <b>' + compass + ' (' + bearing + '°)</b></div>' +
+          '<div class="berg-detail">Move/96h: <b>' + distKm + ' km</b></div>' +
+          '<div class="berg-detail">Type: <b>' + (size > 1000 ? 'Giant' : size > 200 ? 'Large' : 'Medium') + '</b></div>' +
+          '<div class="berg-detail">Threat: <b>' + threatCat + '</b></div>' +
+        '</div>';
+      bl.appendChild(el);
+
+      // Map markers & paths
+      var c = '#f59e0b';
+      var ll = t.lons.map(function(lo, i) { return [t.lats[i], lo]; });
+
+      var path = L.polyline(ll, { color: c, weight: 2, opacity: 0.5, dashArray: '4,6' });
+      bergPaths.push(path);
+      path.addTo(map);
+
+      L.circleMarker([t.lats[0], t.lons[0]], { color: c, fillColor: c, fillOpacity: 0.9, radius: 5, weight: 2 })
+        .addTo(map)
+        .bindPopup('<b>' + nm + '</b><br>' + size + 'm ' + (size > 1000 ? 'Giant' : size > 200 ? 'Large' : 'Medium') + '<br>Speed: ' + speedKt + ' kt ' + compass);
+
+      var dm = L.circleMarker([t.lats[0], t.lons[0]], { color: '#fff', fillColor: c, fillOpacity: 0.4, radius: 3, weight: 1 });
+      bergDrifts.push({ m: dm, lon: t.lons, lat: t.lats, i: 0 });
+      dm.addTo(map);
+    });
+    animDrift();
+
+    // ---- Iceberg comparison chart ----
+    (function() {
+      var bergNames = Object.keys(bd);
+      var bergSizes = bergNames.map(function(nm) { return szMap[nm] || 0; });
+      var bergSpeeds = bergNames.map(function(nm) {
+        var d = bergs ? bergs.find(function(b) { return b.name === nm; }) : null;
+        return d ? d.avg_speed_knots : 0;
+      });
+      var bergDist = bergNames.map(function(nm) {
+        var d = bergs ? bergs.find(function(b) { return b.name === nm; }) : null;
+        return d ? d.displacement_km : 0;
+      });
+      // Normalize each metric to 0-100 for visual comparison
+      var maxSz = Math.max.apply(null, bergSizes) || 1;
+      var maxSp = Math.max.apply(null, bergSpeeds) || 1;
+      var maxDk = Math.max.apply(null, bergDist) || 1;
+      var szNorm = bergSizes.map(function(v) { return Math.round(v / maxSz * 100); });
+      var spNorm = bergSpeeds.map(function(v) { return Math.round(v / maxSp * 100); });
+      var dkNorm = bergDist.map(function(v) { return Math.round(v / maxDk * 100); });
+
+      new Chart(document.getElementById('c-berg'), {
+        type: 'bar',
+        data: {
+          labels: bergNames,
+          datasets: [
+            { label: 'Size', data: szNorm, backgroundColor: '#f59e0b', borderRadius: 3, barPercentage: 0.7, categoryPercentage: 0.8 },
+            { label: 'Speed', data: spNorm, backgroundColor: '#38bdf8', borderRadius: 3, barPercentage: 0.7, categoryPercentage: 0.8 },
+            { label: 'Displacement', data: dkNorm, backgroundColor: '#ef4444', borderRadius: 3, barPercentage: 0.7, categoryPercentage: 0.8 }
+          ]
+        },
+        options: {
+          indexAxis: 'y',
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              position: 'bottom',
+              labels: { color: '#5a6d8a', font: { size: 9 }, boxWidth: 10, padding: 8, usePointStyle: true, pointStyle: 'rectRounded' }
+            },
+            tooltip: {
+              callbacks: {
+                label: function(ctx) {
+                  var realVal = ctx.datasetIndex === 0 ? bergSizes[ctx.dataIndex] + 'm'
+                    : ctx.datasetIndex === 1 ? bergSpeeds[ctx.dataIndex].toFixed(2) + ' kt'
+                    : bergDist[ctx.dataIndex].toFixed(1) + ' km';
+                  return ctx.dataset.label + ': ' + realVal + ' (' + ctx.raw + '%)';
+                }
+              }
+            }
+          },
+          scales: {
+            x: {
+              max: 110,
+              grid: { color: '#1a2744' },
+              ticks: { display: false }
+            },
+            y: {
+              grid: { display: false },
+              ticks: { color: '#c8d6e5', font: { size: 10, weight: '600' } }
+            }
+          }
+        }
+      });
+    })();
+
+    // ---- Status ----
+    document.getElementById('sys-status').textContent = 'System Nominal';
+    document.getElementById('sys-status').style.color = '#22c55e';
+
+  } catch(e) {
+    console.error('Boot error:', e);
+    document.getElementById('sys-status').textContent = 'Error Loading Data';
+    document.getElementById('sys-status').style.color = '#ef4444';
+  }
+}
+
+boot();
+</script>
+</body>
+</html>

@@ -1,0 +1,17 @@
+{
+  "mae": 1.346,
+  "rmse": 2.826,
+  "r2": 0.995,
+  "feature_importance": {
+    "latitude": 0.012,
+    "longitude": 0.003,
+    "sst": 0.9842,
+    "wind_speed": 0.0002,
+    "current_u": 0.0003,
+    "current_v": 0.0002
+  },
+  "training_samples": 76800,
+  "test_samples": 19200,
+  "trained_at": "2026-08-27T19:34:51.139804",
+  "data_source": "Copernicus Marine Service (OSI SAF AMSR2 SIC)"
+}
